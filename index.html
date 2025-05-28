@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transportation English LMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .session-card {
+            transition: all 0.3s ease;
+        }
+        .session-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .locked {
+            filter: grayscale(80%);
+            opacity: 0.7;
+        }
+        .completed {
+            border-left: 5px solid #10B981;
+            background-color: #f0fdf4;
+        }
+        .current {
+            border-left: 5px solid #3B82F6;
+            background-color: #eff6ff;
+        }
+        #loginModal, #sessionModal, #attendanceModal, #completionModal, #syncModal {
+            transition: opacity 0.3s ease;
+        }
+        .modal-open {
+            overflow: hidden;
+        }
+        .session-image {
+            height: 120px;
+            object-fit: cover;
+            width: 100%;
+        }
+        .unlock-animation {
+            animation: unlockPulse 1.5s ease-out;
+        }
+        @keyframes unlockPulse {
+            0% { transform: scale(1); box-shadow: none; }
+            50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            100% { transform: scale(1); box-shadow: none; }
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideIn 0.5s, fadeOut 0.5s 2.5s forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .unsynced-badge {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .sync-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+            <div class="text-center mb-6">
+                <img src="https://corner.unimar-amni.ac.id/wp-content/uploads/2022/09/cropped-AMNI.png" 
+         alt="UNIMAR AMNI Logo" 
+         class="mx-auto h-16 w-auto mb-4"
+style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1))">
+                <h3 class="text-1xl font-bold text-blue-900">Universitas Maritim AMNI Semarang</h3>
+                <h2 class="text-2xl font-bold text-gray-800">Transportation English LMS</h2>
+                <p class="text-gray-600 mt-2">Please login to continue</p>
+            </div>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label for="nim" class="block text-sm font-medium text-gray-700 mb-1">NIM</label>
+                    <input type="text" id="nim" name="nim" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           placeholder="Enter your NIM" required>
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="password" name="password" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           placeholder="Enter password" required>
+                </div>
+                <div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition">
+                        Login
+                    </button>
+                </div>
+            </form>
+            <div id="loginError" class="mt-4 text-red-500 text-sm hidden">
+                <i class="fas fa-exclamation-circle mr-2"></i> Incorrect NIM or password. Please try again.
+            </div>
+            <div class="mt-4 text-center text-sm text-gray-500">
+                <p>Default password: trans12345</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="bg-blue-700 text-white shadow-md">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold">Transportation English</h1>
+                    <p id="greeting" class="text-blue-100 text-sm">Hi, Student</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="connectionStatus" class="flex items-center">
+                        <span id="connectionIcon" class="mr-1"></span>
+                        <span id="connectionText" class="text-sm"></span>
+                    </div>
+                    <button id="syncBtn" class="bg-white text-blue-700 px-3 py-1 rounded-md hover:bg-blue-50 transition flex items-center text-sm">
+                        <i id="syncIcon" class="fas fa-sync-alt mr-2"></i>
+                        <span>Sync</span>
+                    </button>
+                    <button id="viewScoresBtn" class="bg-white text-blue-700 px-4 py-2 rounded-md hover:bg-blue-50 transition flex items-center">
+                        <i class="fas fa-chart-bar mr-2"></i> View Scores
+                    </button>
+                    <button id="logoutBtn" class="text-white hover:text-blue-100 transition">
+                        <i class="fas fa-sign-out-alt text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Progress Bar -->
+        <div class="bg-blue-50 py-2">
+            <div class="container mx-auto px-4">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-sm font-medium text-blue-800">Course Progress</span>
+                    <span id="progressPercentage" class="text-sm font-medium text-blue-800">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <div id="lastUpdated" class="text-xs text-gray-500 mt-1"></div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-6">Course Sessions</h2>
+            
+            <div id="sessionsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Sessions will be dynamically inserted here -->
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-100 py-4 border-t">
+            <div class="container mx-auto px-4 flex justify-between items-center">
+                <div class="text-sm text-gray-600">
+                    <span id="footerLastUpdated"></span>
+                    <span id="unsyncedBadge" class="hidden ml-2 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full unsynced-badge">
+                        <i class="fas fa-exclamation-triangle mr-1"></i> Unsynced changes
+                    </span>
+                </div>
+                <div class="text-sm text-gray-600">
+                    Transportation English LMS &copy; 2022-2025
+                </div>
+            </div>
+        </footer>
+
+        <!-- Session Modal -->
+        <div id="sessionModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 id="modalSessionTitle" class="text-xl font-bold text-gray-800"></h3>
+                        <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h4 class="font-semibold text-gray-700 mb-2">Attendance</h4>
+                        <button id="openAttendanceBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition flex items-center">
+                            <i class="fas fa-check-circle mr-2"></i> Mark Attendance
+                        </button>
+                        <p id="attendanceStatus" class="text-sm text-gray-500 mt-2 hidden">
+                            <i class="fas fa-check text-green-500 mr-1"></i> Attendance completed
+                        </p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <h4 class="font-semibold text-blue-800 mb-3 flex items-center">
+                                <i class="fas fa-book mr-2"></i> Learning Materials
+                            </h4>
+                            <a id="materialLink" href="#" target="_blank" class="inline-block bg-white text-blue-600 px-4 py-2 rounded-md hover:bg-blue-100 transition border border-blue-200">
+                                <i class="fas fa-external-link-alt mr-2"></i> Open Materials
+                            </a>
+                        </div>
+                        
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <h4 class="font-semibold text-green-800 mb-3 flex items-center">
+                                <i class="fas fa-tasks mr-2"></i> Assignment
+                            </h4>
+                            <a id="assignmentLink" href="#" target="_blank" class="inline-block bg-white text-green-600 px-4 py-2 rounded-md hover:bg-green-100 transition border border-green-200">
+                                <i class="fas fa-external-link-alt mr-2"></i> Open Assignment
+                            </a>
+                            <p id="assignmentStatus" class="text-sm text-gray-500 mt-2 hidden">
+                                <i class="fas fa-check text-green-500 mr-1"></i> Assignment completed
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div id="completionMessage" class="mt-6 p-4 bg-green-100 text-green-800 rounded-md hidden">
+                        <i class="fas fa-check-circle mr-2"></i> This session has been completed. The next session is now unlocked.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Modal -->
+        <div id="attendanceModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">Attendance Form</h3>
+                    <button id="closeAttendanceModalBtn" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form id="attendanceForm" class="space-y-4">
+                    <div>
+                        <label for="studentName" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input type="text" id="studentName" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" readonly>
+                    </div>
+                    <div>
+                        <label for="studentNim" class="block text-sm font-medium text-gray-700 mb-1">NIM</label>
+                        <input type="text" id="studentNim" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" readonly>
+                    </div>
+                    <div>
+                        <label for="sessionName" class="block text-sm font-medium text-gray-700 mb-1">Session</label>
+                        <input type="text" id="sessionName" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" readonly>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="attendanceCheck" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="attendanceCheck" class="ml-2 block text-sm text-gray-700">I confirm my attendance</label>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-2">
+                        <button type="button" id="googleFormBtn" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition flex items-center">
+                            <i class="fab fa-google mr-2"></i> Use Google Form
+                        </button>
+                        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">
+                            Submit Attendance
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Completion Modal -->
+        <div id="completionModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                        <i class="fas fa-check text-green-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mt-3">Congratulations!</h3>
+                    <div class="mt-2">
+                        <p class="text-sm text-gray-500">
+                            Okay, Good. You have completed all the sessions, Wait for your lecturer's confirmation.
+                        </p>
+                    </div>
+                    <div class="mt-4">
+                        <button id="closeCompletionModalBtn" type="button" class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Conflict Modal -->
+        <div id="syncModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mt-3">Sync Conflict</h3>
+                    <div class="mt-2">
+                        <p class="text-sm text-gray-500">
+                            There are differences between your local progress and the server version.
+                        </p>
+                        <div class="mt-4 text-left">
+                            <p class="font-medium">Local Progress:</p>
+                            <p id="localProgressInfo" class="text-sm text-gray-500"></p>
+                            <p class="font-medium mt-2">Server Progress:</p>
+                            <p id="serverProgressInfo" class="text-sm text-gray-500"></p>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-center space-x-4">
+                        <button id="useLocalBtn" type="button" class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+                            Use Local
+                        </button>
+                        <button id="useServerBtn" type="button" class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-gray-600 text-base font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm">
+                            Use Server
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">
+        <div class="bg-gray-800 text-white px-4 py-2 rounded-md shadow-lg flex items-center">
+            <i id="toastIcon" class="fas fa-info-circle mr-2"></i>
+            <span id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script>
+        // Password for login
+        const PASSWORD = "trans12345";
+        
+        // Google Apps Script URL (replace with your actual script URL)
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbyz4rxPXfuTxZLIWcX4w2CmnCP5nobpxqrteZkwDR1-bbnafEdmsQ_mlzOIThqJDPna/exec";
+        
+        // Student data
+        const students = [
+            { nim: "00000", name: "ADMIN1" },
+            { nim: "11111", name: "ADMIN2" },
+            { nim: "242504001", name: "ACHMAD QODRI AZIZY PRASETYO" },
+            { nim: "242504004", name: "AGUSTINUS JAGA BILI" },
+            { nim: "242504005", name: "AHMAD JANUARDI ZULHAFIZIN" },
+            { nim: "242504006", name: "AHMAD MALIK ABDUL JABBAR SEPHA" },
+            { nim: "242504007", name: "AKBAR RYAN ZAHIRAH" },
+            { nim: "242504009", name: "ALHAFIDZ KAHAR" },
+            { nim: "242504010", name: "ALWI SAOMA NUGRAHA" },
+            { nim: "242504011", name: "ALYA KHASANAH" },
+            { nim: "242504013", name: "ARISKA DAMAYANTI" },
+            { nim: "242504014", name: "ASYA DWI REVALINA FITRI" },
+            { nim: "242504015", name: "AZAHRA NUR VILDA SEPTIANA" },
+            { nim: "242504016", name: "BAGAS MUHAMMAD RIDWAN" },
+            { nim: "242504018", name: "BERLIANA ZAHRA" },
+            { nim: "242504020", name: "BINTANG AKBAR RAMADHAN" },
+            { nim: "242504022", name: "DESWITA FHARISA FINANDA" },
+            { nim: "242504024", name: "DICKO ADI SAPUTRA" },
+            { nim: "242504025", name: "DIMAS ARYA PRAMANA" },
+            { nim: "242504021", name: "DANENDRA SURYO SANTOSO" },
+            { nim: "242504026", name: "DODY LUKMANUL HAKIM" },
+            { nim: "242504028", name: "DZAFIF AN NAAFI'U" },
+            { nim: "242504029", name: "ELANG HANANDA PRATAMA SAPUTRA" },
+            { nim: "242504030", name: "ELTHA INDAH" },
+            { nim: "242504031", name: "ERZHY DWI FEBRIAN" },
+            { nim: "242504032", name: "FADIL ADIKA EFENDY" },
+            { nim: "242504033", name: "FAHRIZKI AGUSTIAN TRISNAPUTRA" },
+            { nim: "242504034", name: "FAIZ AHMAD ALFARIZI" },
+            { nim: "242504035", name: "FATAR ADITYA" },
+            { nim: "242504036", name: "FILA FAIRIZA CINTA NOURA AYU" },
+            { nim: "242504037", name: "FIYU ERLANGGA GIBRAN" },
+            { nim: "242504040", name: "GUNTUR GABRIEL DIVO ALEXANDER" },
+            { nim: "242504041", name: "HENDI AGRIPHINA HAFIS" },
+            { nim: "242504043", name: "INTAN MADINATUL ZAHRA" },
+            { nim: "242504044", name: "IZHAR SYAHBANA ZUHRI" },
+            { nim: "242504045", name: "JIHAT MAHISA ATMAJA" },
+            { nim: "242504046", name: "JOSHUA DESEMBRIKO ABRIANEST TAKASILY" },
+            { nim: "242504049", name: "KATARINA TERSISA RUMJAAN" },
+            { nim: "242504050", name: "KHAIRUNNISA ADINDA" },
+            { nim: "242504053", name: "M. KHANSA FARRELQHY HENRI WENAS" },
+            { nim: "242504054", name: "MARIA YOHANISTA SURYAWAN" },
+            { nim: "242504057", name: "MOHAMMAD HAZAL FALADIL AMIN" },
+            { nim: "242504059", name: "MUHAMAD REZA SATRIA KUKUH" },
+            { nim: "242504060", name: "MUHAMMAD FARUQ FAUZIYAD THUFAIL" },
+            { nim: "242504061", name: "MUHAMMAD SULTAN FADHIL RABANI" },
+            { nim: "242504063", name: "NABILA UMNIA RAHMA" },
+            { nim: "242504064", name: "NAURA QUR'RATU AIN" },
+            { nim: "242504066", name: "NIKEN NABILA PUTRI ANDINI" },
+            { nim: "242504067", name: "NIKO RAHMAD RIZKIANTO" },
+            { nim: "242504068", name: "RAJU AGUNG SAPUTRA" },
+            { nim: "242504069", name: "REGINA AULIA" },
+            { nim: "242504071", name: "RENDI FAJAR KUSWORO" },
+            { nim: "242504072", name: "RENDY NARANDA PRAMESWARA ARSADI" },
+            { nim: "242504073", name: "RIDHO SAPUTRA" },
+            { nim: "242504075", name: "ROHID NABIL BEQI" },
+            { nim: "242504078", name: "SERLINA PUTRI CAHYA NINGSIH" },
+            { nim: "242504079", name: "SITI ROHMAH" },
+            { nim: "242504080", name: "SRI AFRI RIANSYAH" },
+            { nim: "242504085", name: "DIMAS ADRIAN MAULANA" },
+            { nim: "242504083", name: "ARI WIBOWO" },
+            { nim: "242504082", name: "BAGUS SETYAWAN" },
+            { nim: "242504062", name: "MUZAKI ZULFI MUBARAK" },
+        ];
+        
+        // Session data with images
+        const sessions = [
+            { 
+                id: 1, 
+                title: "Public Transportation", 
+                materialUrl: "https://sites.google.com/view/englishclass-febamni/trans-english/session-1", 
+                assignmentUrl: "https://forms.gle/LPkDZixeKiKpPmkU8", 
+                imageUrl: "https://images.pexels.com/photos/3480390/pexels-photo-3480390.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: false, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 2, 
+                title: "Land Transportation", 
+                materialUrl: "https://sites.google.com/view/englishclass-febamni/trans-english/session-4", 
+                assignmentUrl: "https://forms.gle/psq7McQmzVXfhWSn8", 
+                imageUrl: "https://images.pexels.com/photos/2199293/pexels-photo-2199293.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 3, 
+                title: "Car Parts", 
+                materialUrl: "https://sites.google.com/view/oecoa/subjects/transportation-english/session-5-tr", 
+                assignmentUrl: "https://forms.gle/LyXLh1BJ9pUq9wBh8", 
+                imageUrl: "https://images.unsplash.com/photo-1494905998402-395d579af36f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 4, 
+                title: "Air Transportation", 
+                materialUrl: "https://sites.google.com/view/englishclass-febamni/trans-english/copy-of-session-7", 
+                assignmentUrl: "https://forms.gle/gxwMgfFRgVU9ejkg7", 
+                imageUrl: "https://images.pexels.com/photos/3027216/pexels-photo-3027216.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 5, 
+                title: "At the Airport", 
+                materialUrl: "https://sites.google.com/view/oecoa/subjects/transportation-english/session-7-tr", 
+                assignmentUrl: "https://forms.gle/dcuWUSGPjzrENCXM9", 
+                imageUrl: "https://images.pexels.com/photos/2026324/pexels-photo-2026324.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 6, 
+                title: "Air Plane Travel", 
+                materialUrl: "https://view.genially.com/665c5426d4dd2000143867d9/interactive-content-airplane-travel", 
+                assignmentUrl: "https://forms.gle/amQpmR9KxbvG33tM7", 
+                imageUrl: "https://images.pexels.com/photos/32151676/pexels-photo-32151676/free-photo-of-close-up-of-klm-cityhopper-aircraft-on-tarmac.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 7, 
+                title: "Water Transportation", 
+                materialUrl: "https://sites.google.com/view/englishclass-febamni/trans-english/session-9", 
+                assignmentUrl: "https://forms.gle/xEvxv7ULDYqxeFGK7", 
+                imageUrl: "https://images.pexels.com/photos/30872944/pexels-photo-30872944/free-photo-of-aerial-view-of-a-crowded-boat-on-green-waters-in-bangladesh.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 8, 
+                title: "Ship Parts", 
+                materialUrl: "https://i.ytimg.com/vi/wXqSOexFGvE/maxresdefault.jpg", 
+                assignmentUrl: "https://forms.gle/D5Th67tAdaY62SnMA", 
+                imageUrl: "https://images.pexels.com/photos/9289239/pexels-photo-9289239.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 9, 
+                title: "At the Port", 
+                materialUrl: "https://sites.google.com/view/englishclass-febamni/trans-english/session-10", 
+                assignmentUrl: "https://forms.gle/nEgTsnDTgqiHQELW6", 
+                imageUrl: "https://images.pexels.com/photos/167676/pexels-photo-167676.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 10, 
+                title: "UTS (Midterm Exam)", 
+                materialUrl: "https://sites.google.com/view/oecoa/subjects/transportation-english/uts-desclaimer", 
+                assignmentUrl: "https://www.cognitoforms.com/UNIMARAMNI/MidtermExamTransportationEnglish", 
+                imageUrl: "https://images.pexels.com/photos/207756/pexels-photo-207756.jpeg?auto=compress&cs=tinysrgb&w=600",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            },
+            { 
+                id: 11, 
+                title: "UAS (Final Exam)", 
+                materialUrl: "https://sites.google.com/view/oecoa/subjects/transportation-english/uas-desclaimer", 
+                assignmentUrl: "https://www.cognitoforms.com/EnglishTransportation/UASENGLISHFORTRANPORTATION", 
+                imageUrl: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80",
+                locked: true, 
+                attendanceCompleted: false, 
+                assignmentCompleted: false 
+            }
+        ];
+
+        // DOM elements
+        const loginModal = document.getElementById('loginModal');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+        const app = document.getElementById('app');
+        const greeting = document.getElementById('greeting');
+        const sessionsContainer = document.getElementById('sessionsContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const lastUpdated = document.getElementById('lastUpdated');
+        const footerLastUpdated = document.getElementById('footerLastUpdated');
+        const unsyncedBadge = document.getElementById('unsyncedBadge');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const viewScoresBtn = document.getElementById('viewScoresBtn');
+        const syncBtn = document.getElementById('syncBtn');
+        const syncIcon = document.getElementById('syncIcon');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const connectionIcon = document.getElementById('connectionIcon');
+        const connectionText = document.getElementById('connectionText');
+        const sessionModal = document.getElementById('sessionModal');
+        const modalSessionTitle = document.getElementById('modalSessionTitle');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const openAttendanceBtn = document.getElementById('openAttendanceBtn');
+        const attendanceStatus = document.getElementById('attendanceStatus');
+        const materialLink = document.getElementById('materialLink');
+        const assignmentLink = document.getElementById('assignmentLink');
+        const assignmentStatus = document.getElementById('assignmentStatus');
+        const completionMessage = document.getElementById('completionMessage');
+        const attendanceModal = document.getElementById('attendanceModal');
+        const attendanceForm = document.getElementById('attendanceForm');
+        const studentName = document.getElementById('studentName');
+        const studentNim = document.getElementById('studentNim');
+        const sessionName = document.getElementById('sessionName');
+        const googleFormBtn = document.getElementById('googleFormBtn');
+        const closeAttendanceModalBtn = document.getElementById('closeAttendanceModalBtn');
+        const completionModal = document.getElementById('completionModal');
+        const closeCompletionModalBtn = document.getElementById('closeCompletionModalBtn');
+        const syncModal = document.getElementById('syncModal');
+        const localProgressInfo = document.getElementById('localProgressInfo');
+        const serverProgressInfo = document.getElementById('serverProgressInfo');
+        const useLocalBtn = document.getElementById('useLocalBtn');
+        const useServerBtn = document.getElementById('useServerBtn');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+        const toastIcon = document.getElementById('toastIcon');
+
+        // Current session being viewed in modal
+        let currentSessionId = null;
+        let currentStudent = null;
+        let hasUnsyncedChanges = false;
+        let lastSyncTime = null;
+        let syncRetryInterval = null;
+
+        // Initialize the app
+        function init() {
+            // Check if user is already logged in
+            const loggedInNim = localStorage.getItem('lms_logged_in_nim');
+            
+            if (loggedInNim) {
+                // Find student data
+                currentStudent = students.find(student => student.nim === loggedInNim);
+                
+                if (currentStudent) {
+                    // Load saved progress
+                    loadProgress().then(() => {
+                        // Show the app
+                        loginModal.classList.add('hidden');
+                        app.classList.remove('hidden');
+                        // Set greeting
+                        greeting.textContent = `Hi, ${currentStudent.name}`;
+                        // Render sessions
+                        renderSessions();
+                        // Update progress
+                        updateProgress();
+                        // Check connection status
+                        updateConnectionStatus();
+                        // Start sync retry interval
+                        startSyncRetryInterval();
+                    });
+                } else {
+                    // Logout if student data not found
+                    localStorage.removeItem('lms_logged_in_nim');
+                }
+            }
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            // Listen for online/offline events
+            window.addEventListener('online', updateConnectionStatus);
+            window.addEventListener('offline', updateConnectionStatus);
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Login form submission
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const nim = document.getElementById('nim').value;
+                const password = document.getElementById('password').value;
+                
+                // Check if NIM exists and password is correct
+                const student = students.find(s => s.nim === nim);
+                
+                if (student && password === PASSWORD) {
+                    // Successful login
+                    currentStudent = student;
+                    localStorage.setItem('lms_logged_in_nim', nim);
+                    loginError.classList.add('hidden');
+                    loginModal.classList.add('hidden');
+                    app.classList.remove('hidden');
+                    document.body.classList.remove('modal-open');
+                    
+                    // Set greeting
+                    greeting.textContent = `Hi, ${student.name}`;
+                    
+                    // Load any saved progress
+                    loadProgress().then(() => {
+                        // Render sessions
+                        renderSessions();
+                        // Update progress
+                        updateProgress();
+                        // Check connection status
+                        updateConnectionStatus();
+                        // Start sync retry interval
+                        startSyncRetryInterval();
+                    });
+                } else {
+                    // Show error
+                    loginError.classList.remove('hidden');
+                }
+            });
+            
+            // Logout button
+            logoutBtn.addEventListener('click', function() {
+                // Sync before logout if online
+                if (navigator.onLine && hasUnsyncedChanges) {
+                    syncProgress().finally(() => {
+                        localStorage.removeItem('lms_logged_in_nim');
+                        currentStudent = null;
+                        app.classList.add('hidden');
+                        loginModal.classList.remove('hidden');
+                        document.getElementById('nim').value = '';
+                        document.getElementById('password').value = '';
+                        loginError.classList.add('hidden');
+                        stopSyncRetryInterval();
+                    });
+                } else {
+                    localStorage.removeItem('lms_logged_in_nim');
+                    currentStudent = null;
+                    app.classList.add('hidden');
+                    loginModal.classList.remove('hidden');
+                    document.getElementById('nim').value = '';
+                    document.getElementById('password').value = '';
+                    loginError.classList.add('hidden');
+                    stopSyncRetryInterval();
+                }
+            });
+            
+            // View scores button
+            viewScoresBtn.addEventListener('click', function() {
+                window.open('https://sites.google.com/view/oecoa/subjects/transportation-english/score-disclaimer', '_blank');
+            });
+            
+            // Sync button
+            syncBtn.addEventListener('click', function() {
+                syncProgress();
+            });
+            
+            // Close modal button
+            closeModalBtn.addEventListener('click', function() {
+                sessionModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Open attendance form button
+            openAttendanceBtn.addEventListener('click', function() {
+                if (currentSessionId !== null && currentStudent !== null) {
+                    // Set attendance form values
+                    studentName.value = currentStudent.name;
+                    studentNim.value = currentStudent.nim;
+                    sessionName.value = sessions[currentSessionId - 1].title;
+                    
+                    // Show attendance modal
+                    attendanceModal.classList.remove('hidden');
+                    document.body.classList.add('modal-open');
+                }
+            });
+            
+            // Close attendance modal button
+            closeAttendanceModalBtn.addEventListener('click', function() {
+                attendanceModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Google Form button
+            googleFormBtn.addEventListener('click', function() {
+                window.open('https://forms.gle/9wBxRTEQ4qPeW3vY7', '_blank');
+                
+                // Mark attendance as completed
+                if (currentSessionId !== null) {
+                    sessions[currentSessionId - 1].attendanceCompleted = true;
+                    
+                    // Update UI
+                    openAttendanceBtn.classList.add('hidden');
+                    attendanceStatus.classList.remove('hidden');
+                    
+                    // Save progress
+                    saveProgress();
+                    
+                    // Check if session is completed (both attendance and assignment)
+                    checkSessionCompletion();
+                }
+                
+                attendanceModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Attendance form submission
+            attendanceForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const attendanceCheck = document.getElementById('attendanceCheck');
+                
+                if (attendanceCheck.checked && currentSessionId !== null) {
+                    // Mark attendance as completed
+                    sessions[currentSessionId - 1].attendanceCompleted = true;
+                    
+                    // Update UI
+                    openAttendanceBtn.classList.add('hidden');
+                    attendanceStatus.classList.remove('hidden');
+                    
+                    // Save progress
+                    saveProgress();
+                    
+                    // Check if session is completed (both attendance and assignment)
+                    checkSessionCompletion();
+                }
+                
+                attendanceModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Assignment link click (we'll track this via a click handler)
+            assignmentLink.addEventListener('click', function() {
+                if (currentSessionId !== null) {
+                    // Mark assignment as completed
+                    sessions[currentSessionId - 1].assignmentCompleted = true;
+                    
+                    // Update UI
+                    assignmentStatus.classList.remove('hidden');
+                    
+                    // Save progress
+                    saveProgress();
+                    
+                    // Check if session is completed (both attendance and assignment)
+                    checkSessionCompletion();
+                }
+            });
+            
+            // Close completion modal button
+            closeCompletionModalBtn.addEventListener('click', function() {
+                completionModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Use local button in sync conflict modal
+            useLocalBtn.addEventListener('click', function() {
+                // Already using local, just hide the modal
+                syncModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+            
+            // Use server button in sync conflict modal
+            useServerBtn.addEventListener('click', function() {
+                // Apply server data
+                loadFromServer().then(serverData => {
+                    if (serverData.completedSessions) {
+                        applyProgressToSessions(serverData);
+                        renderSessions();
+                        updateProgress();
+                        showToast('Server progress loaded successfully', 'success');
+                    }
+                });
+                
+                syncModal.classList.add('hidden');
+                document.body.classList.remove('modal-open');
+            });
+        }
+
+        // Update connection status indicator
+        function updateConnectionStatus() {
+            if (navigator.onLine) {
+                connectionIcon.className = 'fas fa-wifi text-green-500';
+                connectionText.textContent = 'Online';
+                connectionText.className = 'text-sm text-green-500';
+                
+                // If we have unsynced changes, try to sync now
+                if (hasUnsyncedChanges) {
+                    syncProgress();
+                }
+            } else {
+                connectionIcon.className = 'fas fa-wifi-slash text-red-500';
+                connectionText.textContent = 'Offline';
+                connectionText.className = 'text-sm text-red-500';
+            }
+        }
+
+        // Start sync retry interval (every 5 minutes)
+        function startSyncRetryInterval() {
+            if (syncRetryInterval) clearInterval(syncRetryInterval);
+            syncRetryInterval = setInterval(() => {
+                if (navigator.onLine && hasUnsyncedChanges) {
+                    syncProgress();
+                }
+            }, 5 * 60 * 1000); // 5 minutes
+        }
+
+        // Stop sync retry interval
+        function stopSyncRetryInterval() {
+            if (syncRetryInterval) clearInterval(syncRetryInterval);
+            syncRetryInterval = null;
+        }
+
+        // Render all sessions with images
+        function renderSessions() {
+            sessionsContainer.innerHTML = '';
+            
+            sessions.forEach(session => {
+                const sessionCard = document.createElement('div');
+                sessionCard.className = `session-card bg-white rounded-lg shadow-md overflow-hidden border-l-4 ${session.locked ? 'locked' : 'current'} ${session.attendanceCompleted && session.assignmentCompleted ? 'completed' : ''}`;
+                
+                sessionCard.innerHTML = `
+                    <div>
+                        <img src="${session.imageUrl}" alt="${session.title}" class="session-image w-full">
+                    </div>
+                    <div class="p-6">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-lg text-gray-800">Session ${session.id}</h3>
+                                <p class="text-gray-600">${session.title}</p>
+                            </div>
+                            <div>
+                                ${session.locked ? 
+                                    '<span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full flex items-center"><i class="fas fa-lock mr-1 text-xs"></i> Locked</span>' : 
+                                    (session.attendanceCompleted && session.assignmentCompleted) ?
+                                    '<span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"><i class="fas fa-check mr-1 text-xs"></i> Completed</span>' :
+                                    '<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"><i class="fas fa-unlock mr-1 text-xs"></i> Open</span>'
+                                }
+                            </div>
+                        </div>
+                        <button class="mt-4 w-full ${session.locked ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white py-2 px-4 rounded-md transition" 
+                                ${session.locked ? 'disabled' : ''}
+                                data-session-id="${session.id}">
+                            ${session.locked ? 'Locked' : 'Open Session'}
+                        </button>
+                    </div>
+                `;
+                
+                // Add click event to the button if not locked
+                if (!session.locked) {
+                    const button = sessionCard.querySelector('button');
+                    button.addEventListener('click', () => openSessionModal(session.id));
+                }
+                
+                sessionsContainer.appendChild(sessionCard);
+            });
+        }
+
+        // Open session modal
+        function openSessionModal(sessionId) {
+            currentSessionId = sessionId;
+            const session = sessions[sessionId - 1];
+            
+            // Set modal content
+            modalSessionTitle.textContent = `Session ${sessionId}: ${session.title}`;
+            materialLink.href = session.materialUrl;
+            assignmentLink.href = session.assignmentUrl;
+            
+            // Update attendance status
+            if (session.attendanceCompleted) {
+                openAttendanceBtn.classList.add('hidden');
+                attendanceStatus.classList.remove('hidden');
+            } else {
+                openAttendanceBtn.classList.remove('hidden');
+                attendanceStatus.classList.add('hidden');
+            }
+            
+            // Update assignment status
+            if (session.assignmentCompleted) {
+                assignmentStatus.classList.remove('hidden');
+            } else {
+                assignmentStatus.classList.add('hidden');
+            }
+            
+            // Hide completion message initially
+            completionMessage.classList.add('hidden');
+            
+            // Show modal
+            sessionModal.classList.remove('hidden');
+            document.body.classList.add('modal-open');
+        }
+
+        // Check if current session is completed and unlock next one
+        function checkSessionCompletion() {
+            if (currentSessionId !== null) {
+                const session = sessions[currentSessionId - 1];
+                
+                if (session.attendanceCompleted && session.assignmentCompleted) {
+                    // Show completion message
+                    completionMessage.classList.remove('hidden');
+                    
+                    // Unlock next session if there is one
+                    if (currentSessionId < sessions.length) {
+                        sessions[currentSessionId].locked = false;
+                        
+                        // Add animation class to the next session card
+                        const nextSessionCard = document.querySelector(`[data-session-id="${currentSessionId + 1}"]`).closest('.session-card');
+                        if (nextSessionCard) {
+                            nextSessionCard.classList.add('unlock-animation');
+                            setTimeout(() => {
+                                nextSessionCard.classList.remove('unlock-animation');
+                            }, 1500);
+                        }
+                    }
+                    
+                    // Check if all sessions are completed
+                    const allCompleted = sessions.every(s => s.attendanceCompleted && s.assignmentCompleted);
+                    if (allCompleted) {
+                        showCompletionModal();
+                    }
+                    
+                    // Save progress
+                    saveProgress();
+                    
+                    // Update UI
+                    updateProgress();
+                    renderSessions();
+                }
+            }
+        }
+
+        // Show completion modal when all sessions are done
+        function showCompletionModal() {
+            if (currentStudent) {
+                // Show modal
+                completionModal.classList.remove('hidden');
+                document.body.classList.add('modal-open');
+            }
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            toastMessage.textContent = message;
+            
+            // Set icon based on type
+            if (type === 'success') {
+                toastIcon.className = 'fas fa-check-circle mr-2 text-green-500';
+                toast.querySelector('.bg-gray-800').classList.add('bg-green-600');
+                toast.querySelector('.bg-gray-800').classList.remove('bg-gray-800', 'bg-red-600', 'bg-yellow-600');
+            } else if (type === 'error') {
+                toastIcon.className = 'fas fa-exclamation-circle mr-2 text-red-500';
+                toast.querySelector('.bg-gray-800').classList.add('bg-red-600');
+                toast.querySelector('.bg-gray-800').classList.remove('bg-gray-800', 'bg-green-600', 'bg-yellow-600');
+            } else if (type === 'warning') {
+                toastIcon.className = 'fas fa-exclamation-triangle mr-2 text-yellow-500';
+                toast.querySelector('.bg-gray-800').classList.add('bg-yellow-600');
+                toast.querySelector('.bg-gray-800').classList.remove('bg-gray-800', 'bg-green-600', 'bg-red-600');
+            } else {
+                toastIcon.className = 'fas fa-info-circle mr-2 text-blue-500';
+                toast.querySelector('.bg-gray-800').classList.add('bg-gray-800');
+                toast.querySelector('.bg-gray-800').classList.remove('bg-green-600', 'bg-red-600', 'bg-yellow-600');
+            }
+            
+            // Show and then hide the toast
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Load progress from localStorage and server
+        async function loadProgress() {
+            if (!currentStudent) return;
+            
+            // 1. Try to load from localStorage first
+            const localData = localStorage.getItem(`lmsProgress_${currentStudent.nim}`);
+            if (localData) {
+                const parsedData = JSON.parse(localData);
+                applyProgressToSessions(parsedData);
+                updateLastUpdatedDisplay(parsedData.lastUpdated);
+            }
+            
+            // 2. If online, try to load from server and compare
+            if (navigator.onLine) {
+                try {
+                    const serverData = await loadFromServer();
+                    
+                    if (serverData.completedSessions) {
+                        // If we have local data, compare timestamps
+                        if (localData) {
+                            const localParsed = JSON.parse(localData);
+                            
+                            if (new Date(serverData.lastUpdated) > new Date(localParsed.lastUpdated)) {
+                                // Server has newer data, show conflict resolution
+                                showSyncConflict(localParsed, serverData);
+                            }
+                        } else {
+                            // No local data, just use server data
+                            applyProgressToSessions(serverData);
+                            updateLastUpdatedDisplay(serverData.lastUpdated);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading from server:", error);
+                    showToast('Failed to load progress from server', 'error');
+                }
+            }
+            
+            // Make sure the first session is always unlocked
+            sessions[0].locked = false;
+            
+            // Ensure proper unlocking sequence
+            for (let i = 0; i < sessions.length - 1; i++) {
+                if (sessions[i].attendanceCompleted && sessions[i].assignmentCompleted) {
+                    sessions[i + 1].locked = false;
+                } else {
+                    // If a session isn't completed, lock all subsequent sessions
+                    for (let j = i + 1; j < sessions.length; j++) {
+                        sessions[j].locked = true;
+                        sessions[j].attendanceCompleted = false;
+                        sessions[j].assignmentCompleted = false;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Load progress from server
+        async function loadFromServer() {
+            if (!currentStudent) return {};
+            
+            try {
+                const response = await fetch(`${GAS_URL}?nim=${currentStudent.nim}`);
+                const data = await response.json();
+                
+                // If we got valid data, return it
+                if (data.completedSessions) {
+                    return data;
+                }
+                
+                return {};
+            } catch (error) {
+                console.error("Error loading from server:", error);
+                throw error;
+            }
+        }
+
+        // Show sync conflict modal
+        function showSyncConflict(localData, serverData) {
+            // Format the data for display
+            const localSessions = localData.completedSessions.map(id => `Session ${id}`).join(', ') || 'None';
+            const serverSessions = serverData.completedSessions.map(id => `Session ${id}`).join(', ') || 'None';
+            
+            localProgressInfo.textContent = `${localSessions} (Last updated: ${new Date(localData.lastUpdated).toLocaleString()})`;
+            serverProgressInfo.textContent = `${serverSessions} (Last updated: ${new Date(serverData.lastUpdated).toLocaleString()})`;
+            
+            // Show the modal
+            syncModal.classList.remove('hidden');
+            document.body.classList.add('modal-open');
+        }
+
+        // Apply loaded progress to sessions array
+        function applyProgressToSessions(progressData) {
+            // Reset all sessions first
+            sessions.forEach(session => {
+                session.locked = true;
+                session.attendanceCompleted = false;
+                session.assignmentCompleted = false;
+            });
+            
+            // Mark completed sessions
+            if (progressData.completedSessions) {
+                progressData.completedSessions.forEach(sessionId => {
+                    const session = sessions.find(s => s.id === sessionId);
+                    if (session) {
+                        session.attendanceCompleted = true;
+                        session.assignmentCompleted = true;
+                    }
+                });
+            }
+            
+            // Update last sync time
+            if (progressData.lastUpdated) {
+                lastSyncTime = new Date(progressData.lastUpdated);
+                updateLastUpdatedDisplay(progressData.lastUpdated);
+            }
+            
+            // Reset unsynced changes flag since we just loaded data
+            hasUnsyncedChanges = false;
+            updateUnsyncedBadge();
+        }
+
+        // Save progress to localStorage and server
+        async function saveProgress() {
+            if (!currentStudent) return;
+            
+            // Get completed sessions
+            const completedSessions = sessions
+                .filter(s => s.attendanceCompleted && s.assignmentCompleted)
+                .map(s => s.id);
+            
+            // Prepare progress data
+            const progressData = {
+                completedSessions: completedSessions,
+                lastUpdated: new Date().toISOString()
+            };
+            
+            // 1. Save to localStorage
+            localStorage.setItem(`lmsProgress_${currentStudent.nim}`, JSON.stringify(progressData));
+            updateLastUpdatedDisplay(progressData.lastUpdated);
+            
+            // 2. If online, try to save to server
+            if (navigator.onLine) {
+                await syncProgress();
+            } else {
+                // Mark as unsynced
+                hasUnsyncedChanges = true;
+                updateUnsyncedBadge();
+                showToast('Progress saved locally. Will sync when online.', 'warning');
+            }
+        }
+
+        // Sync progress with server
+        async function syncProgress() {
+            if (!currentStudent || !navigator.onLine) {
+                if (!navigator.onLine) {
+                    showToast('Cannot sync while offline', 'error');
+                }
+                return false;
+            }
+            
+            // Show loading on sync button
+            syncIcon.className = 'fas fa-sync-alt mr-2 sync-spinner';
+            
+            try {
+                // Get current progress
+                const localData = localStorage.getItem(`lmsProgress_${currentStudent.nim}`);
+                if (!localData) {
+                    showToast('No local progress to sync', 'warning');
+                    return false;
+                }
+                
+                const progressData = {
+                    nim: currentStudent.nim,
+                    progress: JSON.parse(localData)
+                };
+                
+                // Send to server
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(progressData)
+                });
+                
+                const result = await response.text();
+                
+                if (result === 'OK') {
+                    // Success
+                    hasUnsyncedChanges = false;
+                    lastSyncTime = new Date();
+                    updateUnsyncedBadge();
+                    updateLastUpdatedDisplay(progressData.progress.lastUpdated);
+                    showToast('Progress synced successfully', 'success');
+                    return true;
+                } else {
+                    throw new Error('Server returned non-OK response');
+                }
+            } catch (error) {
+                console.error("Sync failed:", error);
+                hasUnsyncedChanges = true;
+                updateUnsyncedBadge();
+                showToast('Failed to sync progress', 'error');
+                return false;
+            } finally {
+                // Reset sync button
+                syncIcon.className = 'fas fa-sync-alt mr-2';
+            }
+        }
+
+        // Update last updated display
+        function updateLastUpdatedDisplay(timestamp) {
+            if (!timestamp) return;
+            
+            const date = new Date(timestamp);
+            const formattedDate = date.toLocaleString();
+            
+            lastUpdated.textContent = `Last updated: ${formattedDate}`;
+            footerLastUpdated.textContent = `Last sync: ${formattedDate}`;
+        }
+
+        // Update unsynced badge visibility
+        function updateUnsyncedBadge() {
+            if (hasUnsyncedChanges) {
+                unsyncedBadge.classList.remove('hidden');
+            } else {
+                unsyncedBadge.classList.add('hidden');
+            }
+        }
+
+        // Update progress bar
+        function updateProgress() {
+            const totalSessions = sessions.length;
+            let completedSessions = 0;
+            
+            sessions.forEach(session => {
+                if (session.attendanceCompleted && session.assignmentCompleted) {
+                    completedSessions++;
+                }
+            });
+            
+            const percentage = Math.round((completedSessions / totalSessions) * 100);
+            progressBar.style.width = `${percentage}%`;
+            progressPercentage.textContent = `${percentage}%`;
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
